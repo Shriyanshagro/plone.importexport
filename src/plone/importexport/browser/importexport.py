@@ -19,6 +19,10 @@ import fnmatch
 from plone.importexport import utils
 import os
 from plone.importexport.exceptions import ImportExportError
+from plone import api
+from plone.api.exc import MissingParameterError
+from plone.api.exc import InvalidParameterError
+import re
 
 global MUST_EXCLUDED_ATTRIBUTES
 global MUST_INCLUDED_ATTRIBUTES
@@ -120,6 +124,28 @@ class ImportExportView(BrowserView):
 
         if self.request.get('actionExist', None)=='ignore' and (path in self.existingPath):
             return 'Ignoring existing content at {} \n'.format(path)
+
+
+        # deserializing review_state
+        if data.get('review_state', None):
+            new_state = str(data['review_state'])
+            state = str(api.content.get_state(obj=context))
+            if new_state!=state:
+                pdb.set_trace()
+                # possible_state = {'publish':['reject', 'retract'],
+                # 'private':['publish', 'submit']
+                # }
+                # https://docs.plone.org/develop/plone.api/docs/api/content.html#plone.api.content.transition
+                if new_state=='private':
+                    new_state = str('retract')
+                elif new_state=='published':
+                    new_state = str('publish')
+                try:
+                    api.content.transition(obj=context, transition=str(new_state))
+                except MissingParameterError as e:
+                    raise ImportExportError('parameter is missing for review_state')
+                except InvalidParameterError as e:
+                    raise ImportExportError('Invalid parameter for review_state')
 
         # restapi expects a string of JSON data
         data = json.dumps(data)
