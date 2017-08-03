@@ -35,11 +35,20 @@ global MUST_INCLUDED_ATTRIBUTES
 
 
 # these attributes must be excluded while exporting
-MUST_EXCLUDED_ATTRIBUTES = ['member', 'parent', 'items', 'changeNote', '@id',
-                       'scales', 'items_total', 'table_of_contents', ]
+MUST_EXCLUDED_ATTRIBUTES = [
+    'member',
+    'parent',
+    'items',
+    'changeNote',
+    '@id',
+    'scales',
+    'items_total',
+    'table_of_contents',
+]
 
 # these attributes must be included while importing
 MUST_INCLUDED_ATTRIBUTES = ['@type', 'path', 'id', 'UID']
+
 
 class ImportExportView(BrowserView):
     """Import/Export page."""
@@ -81,10 +90,7 @@ class ImportExportView(BrowserView):
 
         results = []
         # using plone.restapi to serialize
-        try:
-            serializer = queryMultiAdapter((obj, self.request), ISerializeToJson)
-        except:
-            raise ImportExportError("Error while quering adapter for serializer")
+        serializer = queryMultiAdapter((obj, self.request), ISerializeToJson)
 
         if not serializer:
             raise ImportExportError('Cannot find any adapter for serializer')
@@ -103,15 +109,9 @@ class ImportExportView(BrowserView):
         for member in obj.objectValues():
             # FIXME: defualt plone config @portal_type?
             if member.portal_type != "Plone Site":
-                try:
-                    results += self.serialize(member)
-                except ImportExportError as e:
-                    error = e.message + ' for ' + data['path']
-                    raise ImportExportError(error)
-                except :
-                    error = 'Fatal Error for ' + data['path']
-                    raise ImportExportError(error)
+                results += self.serialize(member)
         return results
+
 
     # context == requested object, data=metadata for object in json string
     # existing content are identified by path and ignored if requested
@@ -125,7 +125,6 @@ class ImportExportView(BrowserView):
         if self.request.get('actionExist', None)=='ignore' and (path in self.existingPath):
             return 'Ignoring existing content at {} \n'.format(path)
 
-
         # deserializing review_state
         if data.get('review_state', None):
             new_state = str(data['review_state'])
@@ -136,9 +135,9 @@ class ImportExportView(BrowserView):
                 # 'private':['publish', 'submit']
                 # }
                 # https://docs.plone.org/develop/plone.api/docs/api/content.html#plone.api.content.transition
-                if new_state=='private':
+                if new_state == 'private':
                     new_state = str('retract')
-                elif new_state=='published':
+                elif new_state == 'published':
                     new_state = str('publish')
                 try:
                     api.content.transition(obj=context, transition=str(new_state))
@@ -158,90 +157,60 @@ class ImportExportView(BrowserView):
         zope.interface.directlyProvides(request, IBrowserRequest)
 
         # using plone.restapi to deserialize
-        try:
-            deserializer = queryMultiAdapter((context, request),
+        deserializer = queryMultiAdapter((context, request),
                                          IDeserializeFromJson)
-        except:
-            raise ImportExportError("Error while quering adapter")
 
-        try:
-            deserializer()
-            return "Success for {} \n".format(path)
-        except DeserializationError as e:
-            error = str(e.message + ' for '+ path + '\n')
-        except BadRequest as e:
-            error = str(e.message + ' for '+ path + '\n')
-        except ValueError as e:
-            error = str(e.message + ' for '+ path + '\n')
-        except:
-            error = str('Fatal Error for '+ path + '\n')
-        return error
+        deserializer()
+        return "Success for {} \n".format(path)
+
 
     def export(self):
 
         global MUST_INCLUDED_ATTRIBUTES
         errors = []
-        try:
-            # create zip in memory
-            self.zip = utils.InMemoryZip()
+        # create zip in memory
+        self.zip = utils.InMemoryZip()
 
-            # defines Pipeline
-            self.conversion = utils.Pipeline()
+        # defines Pipeline
+        self.conversion = utils.Pipeline()
 
-            if self.request and self.request.method == 'POST':
+        if self.request and self.request.method == 'POST':
 
-                # get id_ of Plone sites
-                id_ = self.context.absolute_url_path()[1:]
+            # get id_ of Plone sites
+            id_ = self.context.absolute_url_path()[1:]
 
-                # pdb.set_trace()
-                exportType = self.request.get('exportFormat', None)
+            # pdb.set_trace()
+            exportType = self.request.get('exportFormat', None)
 
-                if self.request.get('fields', None) and (exportType=='csv' or exportType=='combined'):
+            if self.request.get('fields', None) and (exportType=='csv' or exportType=='combined'):
 
-                    # fields/keys to include
-                    include = self.request.get('fields', None)
-                    # BUG in html checkbox input, which send value as a string if only one value have been checked
-                    if isinstance(include, str):
-                        include = [include]
-                    include = list(set(MUST_INCLUDED_ATTRIBUTES +
-                        include))
+                # fields/keys to include
+                include = self.request.get('fields', None)
+                # BUG in html checkbox input, which send value as a string if only one value have been checked
+                if isinstance(include, str):
+                    include = [include]
+                include = list(set(MUST_INCLUDED_ATTRIBUTES +
+                    include))
 
-                else:
-                    # 'No check provided. Thus exporting whole content'
-                    include = self.getheaders()
-                    include = list(set(MUST_INCLUDED_ATTRIBUTES +
-                        include))
-
-                # results is a list of dicts
-                try:
-                    results = self.serialize(self.context)
-                except ImportExportError as e:
-                    raise ImportExportError(e.message)
-                except:
-                    raise ImportExportError('Error while serializing')
-                # pdb.set_trace()
-                try:
-                    self.conversion.convertjson(self, results, include)
-                except ImportExportError as e:
-                    raise ImportExportError(e.message)
-                except:
-                    raise ImportExportError('Error in the Pipeline')
-
-
-                self.request.RESPONSE.setHeader('content-type', 'application/zip')
-                cd = 'attachment; filename=%s.zip' % (id_)
-                self.request.RESPONSE.setHeader('Content-Disposition', cd)
-
-                return self.zip.read()
             else:
-                # pdb.set_trace()
-                raise ImportExportError('Invalid Request')
-        except ImportExportError as e:
-            errors.append(e.message)
-        except:
-            errors.append('Invalid request')
+                # 'No check provided. Thus exporting whole content'
+                include = self.getheaders()
+                include = list(set(MUST_INCLUDED_ATTRIBUTES +
+                                   include))
 
-        return errors
+            # results is a list of dicts
+            results = self.serialize(self.context)
+            self.conversion.convertjson(self, results, include)
+
+            self.request.RESPONSE.setHeader('content-type', 'application/zip')
+            cd = 'attachment; filename=%s.zip' % (id_)
+            self.request.RESPONSE.setHeader('Content-Disposition', cd)
+
+            return self.zip.read()
+        else:
+            # pdb.set_trace()
+            raise ImportExportError('Invalid Request')
+
 
     # invoke non-existent content,  if any
     def createcontent(self, data=None):
@@ -527,25 +496,25 @@ class ImportExportView(BrowserView):
 
         global MUST_EXCLUDED_ATTRIBUTES
 
-        try:
-            data = self.serialize(self.context)
-        except ImportExportError as e:
-            print e.message
-            raise
-        except:
-            print 'Error while serializing'
-            raise
+        #try:
+        data = self.serialize(self.context)
+        #except ImportExportError as e:
+        #    print e.message
+        #    raise
+        #except:
+        #    print 'Error while serializing'
+        #    raise
 
         if not data:
             raise ImportExportError('Provide Data')
 
-        try:
-            conversion = utils.Pipeline()
-            head = conversion.getcsvheaders(data)
-        except ImportExportError as e:
-            raise ImportExportError(e.message)
-        except:
-            raise ImportExportError('Fatal error while getting headers')
+        #try:
+        conversion = utils.Pipeline()
+        head = conversion.getcsvheaders(data)
+        #except ImportExportError as e:
+        #    raise ImportExportError(e.message)
+        #except:
+        #    raise ImportExportError('Fatal error while getting headers')
 
 
         self.exportHeaders = filter(lambda head: head not in MUST_INCLUDED_ATTRIBUTES,
@@ -581,17 +550,10 @@ class ImportExportView(BrowserView):
     # returns matrix of headers for self.context
     def getExportfields(self):
 
-        try:
-            # get headers of self.context
-            headers = self.getheaders()
-            # in matrix form
-            matrix = self.getmatrix(headers=headers, columns=4)
-        except ImportExportError as e:
-            print (e.message)
-            raise
-        except:
-            print ('Fatal error in fetching headers')
-            raise
+        # get headers of self.context
+        headers = self.getheaders()
+        # in matrix form
+        matrix = self.getmatrix(headers=headers, columns=4)
 
         return matrix
 
@@ -601,33 +563,20 @@ class ImportExportView(BrowserView):
         global MUST_INCLUDED_ATTRIBUTES
         # TODO need to implement mechanism to get uploaded file
         # temp csv_file
-        csv_file = 'browser/P2.csv'
-        csvData = open(csv_file,'r')
+        csv_file = '/Users/alex/DownloadsP2.csv'
+        csvData = open(csv_file, 'r')
 
-        try:
-            # convert csv to json
-            conversion = utils.Pipeline()
-            jsonData = conversion.converttojson(data=csvData)
-            # get headers from jsonData
-            headers = conversion.getcsvheaders(jsonData)
-        except ImportExportError as e:
-            print e.message
-            raise
-        except:
-            print ('Fatal error while converting csvData to jsonData')
-            raise
+        # convert csv to json
+        conversion = utils.Pipeline()
+        jsonData = conversion.converttojson(data=csvData)
+        # get headers from jsonData
+        headers = conversion.getcsvheaders(jsonData)
+
 
         headers = filter(lambda headers: headers not in MUST_INCLUDED_ATTRIBUTES,
             headers)
 
         # get matrix of headers
-        try:
-            matrix = self.getmatrix(headers=headers, columns=4)
-        except ImportExportError as e:
-            print (e.message)
-            raise
-        except:
-            print ('Fatal error in fetching headers')
-            raise
+        matrix = self.getmatrix(headers=headers, columns=4)
 
         return matrix
